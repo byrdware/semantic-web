@@ -1,0 +1,34 @@
+@prefix foaf: <http://xmlns.com/foaf/0.1/>.
+@prefix pim: <http://www.w3.org/ns/pim/space#>.
+@prefix schema: <http://schema.org/>.
+@prefix ldp: <http://www.w3.org/ns/ldp#>.
+@prefix cert: <http://www.w3.org/ns/auth/cert#>.
+@prefix dc: <http://purl.org/dc/terms/>.
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#>.
+
+<>
+    a foaf:PersonalProfileDocument ;
+    foaf:maker <<%= profile.url %>#me> ;
+    foaf:primaryTopic <<%= profile.url %>#me> .
+
+<<%= profile.url %>#me>
+    a foaf:Person ;
+    a schema:Person ;
+    foaf:name "<%= profile.fullName %>" ;
+    ldp:inbox </<%= profile.alias %>/inbox/> ;
+    pim:storage </<%= profile.alias %>/storage/> ;
+    pim:preferencesFile </<%= profile.alias %>/settings/> ;
+    cert:key <#key<%= profile.certificates[0].certificate.serial %>> ;
+
+<#key<%= profile.certificates[0].certificate.serial %>>
+    dc:created
+       "<%= profile.certificates[0].certificate.notBefore %>"^^XML:dateTime;
+    dc:title
+       "Created by w3id.net";
+    a    cert:RSAPublicKey;
+    rdfs:label
+       "WebID Certificate";
+    cert:exponent
+       "<%= parseInt(profile.certificates[0].certificate.publicExponent,2) %>"^^XML:int;
+    cert:modulus
+        "<%= profile.certificates[0].certificate.publicModulus %>"^^XML:hexBinary.

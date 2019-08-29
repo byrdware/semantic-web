@@ -1,0 +1,37 @@
+{
+    "@context": {
+        "cert": "http://www.w3.org/ns/auth/cert#",
+        "foaf": "http://xmlns.com/foaf/0.1/"
+    },
+    "@graph": [
+        {
+            "@id": "https://<%= profile.url %>/profile",
+            "@type": "foaf:PersonalProfileDocument",
+            "foaf:primaryTopic": {
+                "@id": "#me"
+            }
+        },
+        {
+            "@id": "#me",
+            "@type": "foaf:Person",
+            "foaf:name": {
+                "@id": "<%= profile.fullName %>"
+            },
+            "foaf:image": {
+                "@id": "<%= profile.image.avatar %>"
+            },
+            "cert:key": {
+                "cert:RSAPublicKey": {
+                    "cert:modulus": {
+                        "@type": "http://www.w3.org/2001/XMLSchema#hexBinary",
+                        "@value": "<%= profile.certificates[0].certificate.publicModulus %>"
+                    },
+                    "cert:exponent": {
+                        "@type": "http://www.w3.org/2001/XMLSchema#integer",
+                        "@value": "<%= parseInt(profile.certificates[0].certificate.publicExponent,2) %>"
+                    }
+                }
+            }
+        }
+    ]
+}

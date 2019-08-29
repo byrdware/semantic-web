@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<rdf:RDF
+  xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+  xmlns:cert="http://www.w3.org/ns/auth/cert#"
+  xmlns:foaf="http://xmlns.com/foaf/0.1/">
+  <foaf:Person rdf:about="<%= profile.url %>#me">
+    <foaf:name><%= profile.fullName %></foaf:name>
+    <foaf:image><%= profile.image.avatar %></foaf:image>
+    <cert:key>
+      <cert:RSAPublicKey>
+        <cert:modulus rdf:datatype="http://www.w3.org/2001/XMLSchema#hexBinary"><%= profile.certificates[0].certificate.publicModulus %></cert:modulus>
+        <cert:exponent rdf:datatype="http://www.w3.org/2001/XMLSchema#integer"><%= parseInt(profile.certificates[0].certificate.publicExponent,2) %></cert:exponent>
+      </cert:RSAPublicKey>
+    </cert:key>
+  </foaf:Person>
+</rdf:RDF>

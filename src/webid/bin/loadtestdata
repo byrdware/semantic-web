@@ -1,0 +1,252 @@
+#!/usr/bin/env node
+
+/////////////////////////////////////////////////////////////////////////////// 
+// Test data generator/profile loader.
+//
+// Simplified Web ID Provider Microservice
+// Copyright (c) 2018 Ted Byrd
+// All Rights Reserved.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to
+// deal in the Software without restriction, including without limitation the
+// rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+// sell copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+// DEALINGS IN THE SOFTWARE.
+//
+/////////////////////////////////////////////////////////////////////////////// 
+
+'use strict';
+
+/////////////////////////////////////////////////////////////////////////////// 
+// Parse command line
+/////////////////////////////////////////////////////////////////////////////// 
+
+var argv = require('yargs')
+  .usage('Usage: $0 [options]')
+  .example('$0 -D -c my.config')
+  .alias('c', 'config')
+  .nargs('c', 1)
+  .describe('c', 'Configuration file name')
+  .alias('D', 'drop')
+  .describe('D', 'Drop the database')
+  .help('h')
+  .alias('h', 'help')
+  .argv;
+
+//////////////////////////////////////////////////////////////////////////////// 
+// Modules
+//////////////////////////////////////////////////////////////////////////////// 
+
+const debug = require('debug')('semantic-web:webid:loadtestdata');
+const faker = require('faker');
+const mongoose = require('mongoose');
+const x509 = require('x509.js');
+const async = require('async');
+const path = require('path');
+const fs = require('fs');
+const winston = require('winston');
+const ENV = process.env.NODE_ENV || 'development';
+const config = require(argv.config ? argv.config : path.join(__dirname, '..', 'etc', 'config.json'))[ENV];
+const { Profile } = require(path.join(__dirname, '..', 'models'));
+const WebID = require('../lib/webid');
+
+//////////////////////////////////////////////////////////////////////////////// 
+// Application Logger
+//////////////////////////////////////////////////////////////////////////////// 
+
+const log = new winston.Logger({
+  transports: [
+    new winston.transports.Console({ json: false, timestamp: true }),
+  ],
+  exceptionHandlers: [
+    new winston.transports.Console({ json: false, timestamp: true }),
+    new winston.transports.File({ filename: path.join(__dirname, 'loadtestdata.crash-reports.json'), json: true })
+  ],
+  exitOnError: true
+});
+
+/////////////////////////////////////////////////////////////////////////////// 
+// MongoDB Connection Pool
+/////////////////////////////////////////////////////////////////////////////// 
+
+mongoose.connect(config.mongodb.url, { useNewUrlParser: true });
+
+mongoose.connection.on('error', (err) => {
+  if (err) {
+    log.error('%s - MongoDB is offline or inaccessible', err.message);
+    process.exit(1);
+  }
+});
+
+mongoose.connection.once('open', () => {
+  log.info('Connected to MongoDB: %s', config.mongodb.url);
+  if (argv.drop) {
+    mongoose.connection.db.dropDatabase((err) => {
+      if (err) { log.error('Dropping database failed: %s', err); }
+      else { log.info('Database dropped'); }
+      createIndexesAndLoad();
+    });
+  } else {
+    createIndexesAndLoad();
+  }
+});
+
+function createIndexesAndLoad() {
+  Profile.createIndexes((err) => {
+    if (err) { log.error('Creating indexes on Profiles collection failed: %s', err); }
+    else { log.info('Indexes created on Profiles collection'); }
+    log.info('Loading database');
+    loadDataBase((err) => {
+      if (err) { log.error('Test load failed: %s', err); process.exit(1); }
+      log.info('Load completed successfully!');
+      process.exit(0);
+    });
+  });
+}
+
+/////////////////////////////////////////////////////////////////////////////// 
+// Data Generation
+/////////////////////////////////////////////////////////////////////////////// 
+
+function loadDataBase(callback) {
+  var profiles = [];
+  const c = faker.random.number({ min: 32, max: 72 });
+  
+  for (var i = 0; i < c; i++) {
+    profiles.push(createProfile());
+  }
+
+  async.eachSeries(profiles, (profile, done) => {
+    const webId = new WebID({
+      name: `${profile.firstName} ${profile.lastName}`,
+      id: `https://w3id.net/${profile.alias}/profile#me`,
+      nick: profile.nickName,
+      image: profile.image.avatar
+    });
+    const certOpts = {
+      userKeyFileName: `/tmp/${profile.alias}.key.pem`,
+      userCertFileName: `/tmp/${profile.alias}.cert.pem`,
+      openssl: {
+        cliDirectory: null,
+        libDirectory: null
+      }
+    };
+    webId.genCertificate(certOpts, (err) => {
+      if (err) { return done(err); }
+      fs.readFile(certOpts.userCertFileName, (err, cert) => {
+        if (err) { return done(err); }
+        profile.certificates = [{
+          purpose: 'WebID',
+          certificate: x509.parseCert(cert)
+        }];
+        Profile.create(profile, (err) => {
+          if (err) { return done(err); }
+          log.info(`Profile for ${profile.alias} loaded successfully`);
+          done();
+        });
+      });
+    });
+  }, (err) => {
+    log.error(err); 
+    callback(err);
+  });
+}
+
+function createProfile() {
+  const card = faker.helpers.contextualCard();
+  debug(card);
+  const avatar = faker.random.number({ min: 1, max: 70 });
+  const background = faker.random.number({ min: 1, max: 1024 });
+  const status = faker.random.arrayElement(['Available','Away','Busy','Offline','Custom']);
+  debug(`Adding profile for ${card.name}`);
+  var lastName = null;
+  return     {
+    alias: card.username.toLowerCase(),
+    agent: 'Person',
+    title: faker.name.title(),
+    firstName: card.name,
+    lastName: lastName = faker.name.lastName(),
+    nickName: faker.lorem.word(),
+    status: status,
+    customStatus: status === 'Custom' ? faker.random.word() : null,
+    gender: faker.random.arrayElement(['Male','Female','Unknown']),
+    marital: faker.random.arrayElement([ 'Unknown', 'Single', 'Married', 'Separated', 'Divorced' ]),
+    myersBriggs: faker.random.arrayElement(['I','E'])+faker.random.arrayElement(['S','N'])+faker.random.arrayElement(['T','F'])+faker.random.arrayElement(['J','P']),
+    birth: {
+      date: card.dob,
+      place: {
+        name: faker.address.city(),
+        geo: faker.address.geo
+      },
+      sign: {
+        sun: faker.random.arrayElement('Aquarius','Pisces','Aries','Taurus','Gemini','Cancer','Leo','Virgo','Libra','Scorpio','Sagittarius','Capricorn'),
+        moon: faker.random.arrayElement('Aquarius','Pisces','Aries','Taurus','Gemini','Cancer','Leo','Virgo','Libra','Scorpio','Sagittarius','Capricorn'),
+        rising: faker.random.arrayElement('Aquarius','Pisces','Aries','Taurus','Gemini','Cancer','Leo','Virgo','Libra','Scorpio','Sagittarius','Capricorn')
+      },
+      parent: {
+        mother: `${faker.name.firstName()} ${lastName}`,
+        father: `${faker.name.firstName()} ${lastName}`
+      }
+    },
+    languages: [{
+      name: faker.random.arrayElement(['English','French','Spanish','German','Mandarin','Esperanto']),
+      proficiency: faker.random.arrayElement(['Beginner','Intermediate','Advanced','Native',undefined])
+    }],
+    image: {
+      avatar: `http://i.pravatar.cc/300?img=${avatar}`,
+      background: `https://picsum.photos/1920/640/?image=${background}`
+    },
+    certificates: [],
+    email: card.email,
+    secondaryEmails: [{
+      type: 'Home',
+      address: faker.internet.email()
+    },{
+      type: 'Work',
+      address: faker.internet.email()
+    }],
+    phones: [{
+      type: 'Home',
+      number: card.phone
+    },{
+      type: 'Work',
+      number: faker.phone.phoneNumber()
+    }],
+    sites: [{
+      type: 'Personal',
+      name: 'My Awesome Blog',
+      description: 'It\'s awesome!',
+      url: `http://${card.website}`
+    }],
+    address: {
+      street: card.address.street + (card.address.suite ? ' ' + card.address.suite : ''),
+      locality: card.address.city,
+      region: faker.address.stateAbbr(),
+      postalCode: card.address.zipcode,
+      country: 'United States',
+      geo: card.address.geo
+    },
+    bio: {
+      summary: faker.lorem.paragraph(),
+      sketch: faker.lorem.paragraphs(),
+    },
+    storage: faker.system.directoryPath(),
+    _password: faker.internet.password()
+  };
+}
+
+/////////////////////////////////////////////////////////////////////////////// 
+// End of File
+/////////////////////////////////////////////////////////////////////////////// 

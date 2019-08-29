@@ -1,0 +1,50 @@
+{
+    "development": {
+        "service": {
+            "name": "webid-dev",
+            "description": "Simplified Web ID Provider Microservice (Development)",
+            "version": "0.0.0",
+            "debug": true,
+            "root": "/",
+            "port": null,
+            "secure": {
+                "port": 4433,
+                "key": "etc/ssl/site.key",
+                "certificate": "etc/ssl/site.cert",
+                "ca": []
+            }
+        },
+        "session": {
+            "password": "a117f0a7b28243f480d80fc9974df9d9"
+        },
+        "passport": {
+        },
+        "mongodb": {
+            "url": "mongodb://localhost:27017/webid-dev"
+        }
+    },
+    "production": {
+        "service": {
+            "name": "webid",
+            "description": "Simplified Web ID Provider Microservice",
+            "version": "0.1.0",
+            "debug": true,
+            "root": "/",
+            "port": null,
+            "secure": {
+                "port": 4443,
+                "key": "./etc/ssl/site.key",
+                "certificate": "./etc/ssl/site.cert",
+                "ca": [ "./etc/ssl/ca.cert" ]
+            }
+        },
+        "session": {
+            "password": "a117f0a7b28243f480d80fc9974df9d9"
+        },
+        "passport": {
+        },
+        "mongodb": {
+            "url": "mongodb://localhost:27107/webid-prod"
+        }
+    }
+}
